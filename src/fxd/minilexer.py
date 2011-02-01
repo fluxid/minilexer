@@ -115,7 +115,7 @@ class BasicContext:
         self.token = None
         self.match = None
 
-    def update_token_match(self, token, match):
+    def token_match(self, token, match):
         self.token = token
         self.match = match
 
@@ -222,7 +222,7 @@ def parse(lexer, readline):
         if match:
             length, match = match
 
-        context.update_token_match(name, match)
+        context.token_match(name, match)
 
         if match is None:
             on_fail = token.get('on_fail')
