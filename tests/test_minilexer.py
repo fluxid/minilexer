@@ -10,15 +10,24 @@ def pass_token(context):
 def qio(string):
     return StringIO(string).readline
 
+class TestContext(minilexer.BasicContext):
+    def __init__(self, lexer):
+        super().__init__(lexer)
+        self.matched = list()
+
+    def token_match(self, token, match):
+        super().token_match(token, match)
+        self.matched.append(token)
+
 BASE = dict(
     _begin = 'begin',
     _on_bad_token = pass_token,
+    _context_class = TestContext,
     finish = dict(
         match = minilexer.MRE('\n?$'),
         after = 'should not happen!',
     )
 )
-
 
 class WellDone(Exception):
     '''
@@ -333,13 +342,30 @@ class TestBaseLexerNegatives(TestCase):
         # ... and make sure we continued
         self.assertTrue(did_it[1])
 
-
-class TestBaseLexerPossibleUsage(TestCase):
+class TestBugFixes(TestCase):
     '''
-    Didn't make one YET, but after all I made this minilexer to use it...
-    More to come soon.
+    Test cases I found invalid, trying to reproduce bugs.
     '''
-    pass
+    def test_percent_wtf(self):
+        my_lexer = dict(
+            BASE,
+            begin = dict(
+                match = (
+                    'a',
+                    'b',
+                )
+            ),
+            a = dict(
+                match = minilexer.MS('a'),
+                after = 'finish',
+            ),
+            b = dict(
+                match = minilexer.MS('b'),
+                after = 'finish',
+            ),
+        )
+        context = minilexer.parse(my_lexer, qio('b'))
+        self.assertListEqual(context.matched, ['b'])
 
 
 class CoveragePenisEnlargement(TestCase):

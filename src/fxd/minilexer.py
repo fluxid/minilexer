@@ -222,13 +222,13 @@ def parse(lexer, readline):
         if match:
             length, match = match
 
-        context.token_match(name, match)
-
         if match is None:
             on_fail = token.get('on_fail')
             if on_fail:
                 on_fail(context)
             continue # I have no idea why this line shows up in coverage3 as missing...
+
+        context.token_match(name, match)
 
         on_match = token.get('on_match')
         if on_match:
