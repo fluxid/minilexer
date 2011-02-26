@@ -7,10 +7,7 @@ from io import StringIO
 def pass_token(context):
     pass
 
-def qio(string):
-    return StringIO(string).readline
-
-class TestContext(minilexer.BasicContext):
+class TestParserSubclass(minilexer.Parser):
     def __init__(self, lexer):
         super().__init__(lexer)
         self.matched = list()
@@ -21,13 +18,17 @@ class TestContext(minilexer.BasicContext):
 
 BASE = dict(
     _begin = 'begin',
-    _on_bad_token = pass_token,
-    _context_class = TestContext,
     finish = dict(
         match = minilexer.MRE('\n?$'),
         after = 'should not happen!',
     )
 )
+
+def parse(lexer, *lines):
+    parser = TestParserSubclass(lexer)
+    parser.feed_iter(lines)
+    parser.finish()
+    return parser
 
 class WellDone(Exception):
     '''
@@ -52,7 +53,7 @@ class TestBaseLexerPositives(TestCase):
                 after = 'finish',
             ),
         )
-        minilexer.parse(my_lexer, qio('word1wOrD2'))
+        parse(my_lexer, 'word1wOrD2')
 
     def test_mre_simple(self):
         my_lexer = dict(
@@ -66,7 +67,7 @@ class TestBaseLexerPositives(TestCase):
                 after = 'finish',
             ),
         )
-        minilexer.parse(my_lexer, qio('word1word1wRD2'))
+        parse(my_lexer, 'word1word1wRD2')
 
     def test_mre_more(self):
         my_lexer = dict(
@@ -84,7 +85,7 @@ class TestBaseLexerPositives(TestCase):
                 after = 'finish',
             ),
         )
-        minilexer.parse(my_lexer, qio('leftwordright'))
+        parse(my_lexer, 'leftwordright')
 
     def test_mm_match(self):
         my_lexer = dict(
@@ -102,7 +103,7 @@ class TestBaseLexerPositives(TestCase):
                 after = 'finish',
             ),
         )
-        minilexer.parse(my_lexer, qio('word1word2'))
+        parse(my_lexer, 'word1word2')
 
     def test_mm_nomatch(self):
         my_lexer = dict(
@@ -129,7 +130,7 @@ class TestBaseLexerPositives(TestCase):
                 after = 'finish',
             ),
         )
-        minilexer.parse(my_lexer, qio('word1word2'))
+        parse(my_lexer, 'word1word2')
 
     def test_groups(self):
         my_lexer = dict(
@@ -150,7 +151,7 @@ class TestBaseLexerPositives(TestCase):
                 after = 'begin',
             ),
         )
-        minilexer.parse(my_lexer, qio('word1word2'))
+        parse(my_lexer, 'word1word2')
 
     def test_nested_groups(self):
         my_lexer = dict(
@@ -191,7 +192,7 @@ class TestBaseLexerPositives(TestCase):
                 after = 'begin',
             ),
         )
-        minilexer.parse(my_lexer, qio('word1word2'))
+        parse(my_lexer, 'word1word2')
 
     def test_after_is_call(self):
         my_lexer = dict(
@@ -201,7 +202,7 @@ class TestBaseLexerPositives(TestCase):
                 after = lambda context: 'finish',
             ),
         )
-        minilexer.parse(my_lexer, qio('matchme!'))
+        parse(my_lexer, 'matchme!')
 
     def test_on_match_call(self):
         did_it = False
@@ -217,7 +218,7 @@ class TestBaseLexerPositives(TestCase):
                 after = 'finish',
             ),
         )
-        minilexer.parse(my_lexer, qio('matchme!'))
+        parse(my_lexer, 'matchme!')
         self.assertTrue(did_it)
 
 
@@ -227,7 +228,7 @@ class TestBaseLexerNegatives(TestCase):
     '''
     def assertRaisesLexerError(self, my_lexer, string, error_id):
         try:
-            minilexer.parse(my_lexer, qio(string))
+            parse(my_lexer, string)
         except minilexer.LexerError as e:
             if e.error_id != error_id:
                 self.fail('Incorrect LexerError raised: {} (kwargs = {})'.format(e.error_id, e.kwargs))
@@ -308,7 +309,7 @@ class TestBaseLexerNegatives(TestCase):
                 after = 'finish',
             ),
         )
-        self.assertRaises(WellDone, minilexer.parse, my_lexer, qio('matchme!'))
+        self.assertRaises(WellDone, parse, my_lexer, 'matchme!')
 
     def test_on_match_call_ignoring(self):
         did_it = [False, False]
@@ -336,7 +337,7 @@ class TestBaseLexerNegatives(TestCase):
                 after = 'finish',
             ),
         )
-        minilexer.parse(my_lexer, qio('matchme!'))
+        parse(my_lexer, 'matchme!')
         # Make sure we really did fail...
         self.assertTrue(did_it[0])
         # ... and make sure we continued
@@ -364,8 +365,8 @@ class TestBugFixes(TestCase):
                 after = 'finish',
             ),
         )
-        context = minilexer.parse(my_lexer, qio('b'))
-        self.assertListEqual(context.matched, ['b'])
+        parser = parse(my_lexer, 'b')
+        self.assertListEqual(parser.matched, ['b'])
 
 
 class CoveragePenisEnlargement(TestCase):

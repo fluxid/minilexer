@@ -26,6 +26,20 @@ log = getLogger(__name__)
 def one_iter(value):
     yield value
 
+def readline_to_iter(readline):
+    while True:
+        line = readline()
+        if not line:
+            return
+        yield line
+
+def reformat_lines(iterator):
+    for line in iterator:
+        for subline in line.splitlines():
+            if not subline.endswith('\n'):
+                subline = subline + '\n'
+            yield line
+
 class Matcher:
     '''
     Base class for matchers
@@ -114,151 +128,133 @@ class LexerError(Exception):
     def __str__(self):
         return self.ID_TO_DESC[self.error_id].format(**self.kwargs)
 
-class BasicContext:
+class Parser:
     def __init__(self, lexer):
         self.lexer = lexer
 
+        self.current_iter = None
         self.current_line = None
-        self.current_lineno = None
-        self.current_pos = None
+        self.current_lineno = 0
+        self.current_pos = 0
+        self.line_length = 0
 
-        self.token = None
-        self.match = None
+        self.reset_iter(lexer['_begin'])
 
-    def update_status(self, current_line, current_lineno, current_pos):
-        self.current_line = current_line
-        self.current_lineno = current_lineno
-        self.current_pos = current_pos
+        self._parser = self.parse()
+        next(self._parser)
 
-        self.token = None
-        self.match = None
+    def feed_readline(self, readline):
+        self.feed_iter(readline_to_iter(readline))
+
+    def feed_iter(self, iterator):
+        for line in reformat_lines(iterator):
+            self._parser.send(line)
+
+    def finish(self):
+        self._parser.close()
 
     def token_match(self, token, match):
-        self.token = token
-        self.match = match
+        log.debug('Matched: {} at line {} pos {}'.format(token, self.current_lineno, self.current_pos+1))
 
-def iter_tokens(lexer, name):
-    onpath = set()
-    visited = set()
+    def iter_tokens(self, name):
+        onpath = set()
+        visited = set()
 
-    stack = list()
+        stack = list()
 
-    current_iter = one_iter(name)
+        token_iter = one_iter(name)
 
-    while True:
-        name = next(current_iter, None)
-        if name is None:
-            if not stack:
-                break
-            name, current_iter = stack.pop()
-            onpath.remove(name)
-            continue
+        while True:
+            name = next(token_iter, None)
+            if name is None:
+                if not stack:
+                    break
+                name, token_iter = stack.pop()
+                onpath.remove(name)
+                continue
 
-        token = lexer.get(name)
-        if token is None:
-            # token not found
-            raise LexerError(LexerError.E_TOKEN_NOT_FOUND, name=name)
+            token = self.lexer.get(name)
+            if token is None:
+                # token not found
+                raise LexerError(LexerError.E_TOKEN_NOT_FOUND, name=name)
 
-        match = token.get('match')
-        if match is None:
-            # token must have 'match' key
-            raise LexerError(LexerError.E_MISSING_MATCH, name=name)
+            match = token.get('match')
+            if match is None:
+                # token must have 'match' key
+                raise LexerError(LexerError.E_MISSING_MATCH, name=name)
 
-        if isinstance(match, Matcher):
-            # It's leaf token
-            if 'after' not in token: 
-                # leaf token must have 'after' key
-                raise LexerError(LexerError.E_MISSING_AFTER, name=name)
-            yield name, token
-            continue
-        
-        # it's not leaf token - it contains a list of tokens to try
+            if isinstance(match, Matcher):
+                # It's leaf token
+                if 'after' not in token: 
+                    # leaf token must have 'after' key
+                    raise LexerError(LexerError.E_MISSING_AFTER, name=name)
+                yield name, token
+                continue
+            
+            # it's not leaf token - it contains a list of tokens to try
 
-        if name in onpath:
-            # It's one of parents - so we would just loop endlessly. Raise an
-            # error so we won't do this.
-            raise LexerError(LexerError.E_LOOP, name=name)
+            if name in onpath:
+                # It's one of parents - so we would just loop endlessly. Raise an
+                # error so we won't do this.
+                raise LexerError(LexerError.E_LOOP, name=name)
 
-        if name in visited:
-            # We have already visited this token once - it's redundant, so we
-            # ignore it without raising an error - it won't hurt.
-            continue
+            if name in visited:
+                # We have already visited this token once - it's redundant, so we
+                # ignore it without raising an error - it won't hurt.
+                continue
 
-        onpath.add(name)
-        visited.add(name)
+            onpath.add(name)
+            visited.add(name)
 
-        stack.append((name, current_iter))
-        current_iter = iter(match)
+            stack.append((name, token_iter))
+            token_iter = iter(match)
 
-def parse(lexer, readline):
-    begin = lexer['_begin']
-    on_bad_token = lexer['_on_bad_token']
-    context_class = lexer.get('_context_class', BasicContext)
+    def reset_iter(self, lookup):
+        self.current_iter = self.iter_tokens(lookup)
 
-    current_iter = None
+    def on_bad_token(self):
+        raise LexerError(LexerError.E_NO_MATCH, lineno=self.current_lineno, pos=self.current_pos+1)
 
-    current_line = None
-    current_lineno = 0
-    current_pos = 0
-    line_length = 0
+    def parse(self):
+        while True:
+            if self.current_pos >= self.line_length:
+                try:
+                    self.current_line = yield
+                except GeneratorExit:
+                    break
 
-    context = context_class(lexer)
+                self.current_lineno += 1
+                self.current_pos = 0
+                self.line_length = len(self.current_line)
 
-    def reset_iter(lookup):
-        nonlocal current_iter
-        current_iter = iter_tokens(lexer, lookup)
+            result = next(self.current_iter, None)
+            if not result:
+                self.on_bad_token()
+                return
 
-    reset_iter(begin)
+            name, token = result
+            matcher = token['match']
+            after = token['after']
 
-    while True:
-        if current_pos >= line_length:
-            current_line = readline()
+            match = matcher.match(self, self.current_line, self.current_pos)
+            if match:
+                length, match = match
 
-            if not current_line:
-                break
+            if match is None:
+                on_fail = token.get('on_fail')
+                if on_fail:
+                    on_fail(self)
+                continue # I have no idea why this line shows up in coverage3 as missing...
 
-            current_lineno += 1
-            current_pos = 0
-            line_length = len(current_line)
+            self.token_match(name, match)
 
-        context.update_status(
-            current_line,
-            current_lineno,
-            current_pos,
-        )
+            on_match = token.get('on_match')
+            if on_match:
+                on_match(self)
 
-        result = next(current_iter, None)
-        if not result:
-            on_bad_token(context)
-            raise LexerError(LexerError.E_NO_MATCH, lineno=current_lineno, pos=current_pos+1)
+            callme = getattr(after, '__call__', None)
+            if callme:
+                after = callme(self)
 
-        name, token = result
-        matcher = token['match']
-        after = token['after']
-
-        match = matcher.match(context, current_line, current_pos)
-        if match:
-            length, match = match
-
-        if match is None:
-            on_fail = token.get('on_fail')
-            if on_fail:
-                on_fail(context)
-            continue # I have no idea why this line shows up in coverage3 as missing...
-
-        context.token_match(name, match)
-
-        on_match = token.get('on_match')
-        if on_match:
-            on_match(context)
-
-        log.debug('Matched: {} at line {} pos {} length {}'.format(name, current_lineno, current_pos+1, length))
-
-        callme = getattr(after, '__call__', None)
-        if callme:
-            after = callme(context)
-
-        current_pos += length
-        reset_iter(after)
-
-    return context
+            self.current_pos += length
+            self.reset_iter(after)
