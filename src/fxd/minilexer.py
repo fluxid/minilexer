@@ -36,9 +36,8 @@ def readline_to_iter(readline):
 def reformat_lines(iterator):
     for line in iterator:
         for subline in line.splitlines():
-            if not subline.endswith('\n'):
-                subline = subline + '\n'
-            yield line
+            subline.rstrip('\r\n')
+            yield subline
 
 class Matcher:
     '''
@@ -244,7 +243,7 @@ class Parser:
                 on_fail = token.get('on_fail')
                 if on_fail:
                     on_fail(self)
-                continue # I have no idea why this line shows up in coverage3 as missing...
+                continue
 
             self.token_match(name, match)
 

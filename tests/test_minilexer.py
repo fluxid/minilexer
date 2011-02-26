@@ -221,6 +221,41 @@ class TestBaseLexerPositives(TestCase):
         parse(my_lexer, 'matchme!')
         self.assertTrue(did_it)
 
+    def test_readline(self):
+        string = StringIO('word1\nword2')
+        # make sure...
+        self.assertListEqual(string.readlines(), ['word1\n', 'word2'])
+        string.seek(0)
+
+        my_lexer = dict(
+            BASE,
+            begin = dict(
+                match = minilexer.MRE('word1$'),
+                after = 'word2',
+            ),
+            word2 = dict(
+                match = minilexer.MS('word2'),
+                after = 'finish',
+            ),
+        )
+        parser = minilexer.Parser(my_lexer)
+        parser.feed_readline(string.readline)
+        parser.finish()
+
+    def test_splitlines(self):
+        my_lexer = dict(
+            BASE,
+            begin = dict(
+                match = minilexer.MRE('word1$'),
+                after = 'word2',
+            ),
+            word2 = dict(
+                match = minilexer.MS('word2'),
+                after = 'finish',
+            ),
+        )
+        parse(my_lexer, 'word1\nword2')
+
 
 class TestBaseLexerNegatives(TestCase):
     '''
