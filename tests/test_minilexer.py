@@ -26,7 +26,7 @@ BASE = dict(
 
 def parse(lexer, *lines):
     parser = TestParserSubclass(lexer)
-    parser.feed_iter(lines)
+    parser.parse_lines(lines)
     parser.finish()
     return parser
 
@@ -239,7 +239,7 @@ class TestBaseLexerPositives(TestCase):
             ),
         )
         parser = minilexer.Parser(my_lexer)
-        parser.feed_readline(string.readline)
+        parser.parse_readline(string.readline)
         parser.finish()
 
     def test_splitlines(self):

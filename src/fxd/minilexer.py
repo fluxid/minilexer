@@ -26,19 +26,6 @@ log = getLogger(__name__)
 def one_iter(value):
     yield value
 
-def readline_to_iter(readline):
-    while True:
-        line = readline()
-        if not line:
-            return
-        yield line
-
-def reformat_lines(iterator):
-    for line in iterator:
-        for subline in line.splitlines():
-            subline.rstrip('\r\n')
-            yield subline
-
 class Matcher:
     '''
     Base class for matchers
@@ -131,6 +118,10 @@ class Parser:
     def __init__(self, lexer):
         self.lexer = lexer
 
+        self.current_readline = None
+        self.line_cache = list()
+        self.next_lineidx = 0
+
         self.current_iter = None
         self.current_line = None
         self.current_lineno = 0
@@ -139,18 +130,35 @@ class Parser:
 
         self.reset_iter(lexer['_begin'])
 
-        self._parser = self.parse()
-        next(self._parser)
+    def parse_readline(self, readline):
+        self.current_readline = readline
+        self.run_parser()
 
-    def feed_readline(self, readline):
-        self.feed_iter(readline_to_iter(readline))
+    def parse_lines(self, lines):
+        iterator = iter(lines)
+        def iterating_readline():
+            try:
+                return next(iterator)
+            except StopIteration:
+                return ''
+        self.parse_readline(iterating_readline)
 
-    def feed_iter(self, iterator):
-        for line in reformat_lines(iterator):
-            self._parser.send(line)
+    def readline(self):
+        if self.next_lineidx >= len(self.line_cache) and self.current_readline:
+            line = self.current_readline()
+            if line:
+                self.line_cache.extend(line.splitlines())
+            else:
+                self.current_readline = None
+
+        line = ''
+        if self.next_lineidx < len(self.line_cache):
+            line = self.line_cache[self.next_lineidx]
+            self.next_lineidx += 1
+        return line
 
     def finish(self):
-        self._parser.close()
+        pass
 
     def token_match(self, token, match):
         log.debug('Matched: {} at line {} pos {}'.format(token, self.current_lineno, self.current_pos+1))
@@ -214,12 +222,11 @@ class Parser:
     def on_bad_token(self):
         raise LexerError(LexerError.E_NO_MATCH, lineno=self.current_lineno, pos=self.current_pos+1)
 
-    def parse(self):
+    def run_parser(self):
         while True:
             if self.current_pos >= self.line_length:
-                try:
-                    self.current_line = yield
-                except GeneratorExit:
+                self.current_line = self.readline()
+                if not self.current_line:
                     break
 
                 self.current_lineno += 1
@@ -229,7 +236,7 @@ class Parser:
             result = next(self.current_iter, None)
             if not result:
                 self.on_bad_token()
-                return
+                break
 
             name, token = result
             matcher = token['match']
