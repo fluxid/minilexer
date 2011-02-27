@@ -4,7 +4,7 @@ from fxd import minilexer
 from unittest import TestCase
 from io import StringIO
 
-def pass_token(context):
+def pass_token(parser):
     pass
 
 class TestParserSubclass(minilexer.Parser):
@@ -27,7 +27,6 @@ BASE = dict(
 def parse(lexer, *lines):
     parser = TestParserSubclass(lexer)
     parser.parse_lines(lines)
-    parser.finish()
     return parser
 
 class WellDone(Exception):
@@ -199,14 +198,14 @@ class TestBaseLexerPositives(TestCase):
             BASE,
             begin = dict(
                 match = minilexer.MS('matchme!'),
-                after = lambda context: 'finish',
+                after = lambda parser: 'finish',
             ),
         )
         parse(my_lexer, 'matchme!')
 
     def test_on_match_call(self):
         did_it = False
-        def do_it(context):
+        def do_it(parser):
             nonlocal did_it
             did_it = True
 
@@ -333,7 +332,7 @@ class TestBaseLexerNegatives(TestCase):
         self.assertRaisesLexerError(my_lexer, 'anything sould do', minilexer.LexerError.E_NO_MATCH)
 
     def test_on_match_call_raising(self):
-        def do_it(context):
+        def do_it(parser):
             raise WellDone()
 
         my_lexer = dict(
@@ -349,7 +348,7 @@ class TestBaseLexerNegatives(TestCase):
     def test_on_match_call_ignoring(self):
         did_it = [False, False]
         def do_it(idx):
-            def really_do_it(context):
+            def really_do_it(parser):
                 did_it[idx] = True
             return really_do_it
 

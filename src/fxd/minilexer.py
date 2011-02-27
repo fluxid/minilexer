@@ -33,7 +33,7 @@ class Matcher:
     def __init__(self):
         pass
 
-    def match(self, context, line, pos):
+    def match(self, parser, line, pos):
         raise NotImplementedError
 
 class MRE(Matcher):
@@ -49,7 +49,7 @@ class MRE(Matcher):
 
         self.regex = re.compile(regex, flags)
 
-    def match(self, context, line, pos):
+    def match(self, parser, line, pos):
         match = self.regex.match(line, pos)
         if match:
             return len(match.group(0)), match
@@ -66,7 +66,7 @@ class MS(Matcher):
         self.icase = icase
         self.string = string
 
-    def match(self, context, line, pos):
+    def match(self, parser, line, pos):
         tmp = line[pos:pos+len(self.string)]
         if self.icase:
             tmp = tmp.lower()
@@ -82,9 +82,9 @@ class MM(Matcher):
     def __init__(self, *args):
         self.args = args
 
-    def match(self, context, line, pos):
+    def match(self, parser, line, pos):
         for arg in self.args:
-            match = arg.match(context, line, pos)
+            match = arg.match(parser, line, pos)
             if match:
                 return match
         return None
@@ -160,9 +160,6 @@ class Parser:
     def finish(self):
         pass
 
-    def token_match(self, token, match):
-        log.debug('Matched: {} at line {} pos {}'.format(token, self.current_lineno, self.current_pos+1))
-
     def iter_tokens(self, name):
         onpath = set()
         visited = set()
@@ -221,6 +218,9 @@ class Parser:
 
     def on_bad_token(self):
         raise LexerError(LexerError.E_NO_MATCH, lineno=self.current_lineno, pos=self.current_pos+1)
+
+    def token_match(self, token, match):
+        log.debug('Matched: {} at line {} pos {}'.format(token, self.current_lineno, self.current_pos+1))
 
     def run_parser(self):
         while True:
