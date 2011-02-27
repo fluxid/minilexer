@@ -84,9 +84,11 @@ class MM(Matcher):
 
     def match(self, parser, line, pos):
         for arg in self.args:
+            parser.cache_push()
             match = arg.match(parser, line, pos)
             if match:
                 return match
+            parser.cache_pop()
         return None
 
 class LexerError(Exception):
@@ -120,6 +122,7 @@ class Parser:
 
         self.current_readline = None
         self.line_cache = list()
+        self.idx_stack = list()
         self.next_lineidx = 0
 
         self.current_iter = None
@@ -156,9 +159,20 @@ class Parser:
             line = self.line_cache[self.next_lineidx]
             self.next_lineidx += 1
         return line
+    
+    def cache_push(self):
+        self.idx_stack.append(self.next_lineidx)
 
-    def finish(self):
-        pass
+    def cache_pop(self):
+        if self.idx_stack:
+            self.next_lineidx = self.idx_stack.pop()
+
+    def cache_purge(self):
+        if self.idx_stack:
+            del self.idx_stack[:]
+        if self.line_cache:
+            del self.line_cache[:self.next_lineidx]
+            self.next_lineidx = 0
 
     def iter_tokens(self, name):
         onpath = set()
@@ -225,6 +239,7 @@ class Parser:
     def run_parser(self):
         while True:
             if self.current_pos >= self.line_length:
+                self.cache_purge()
                 self.current_line = self.readline()
                 if not self.current_line:
                     break
@@ -241,12 +256,15 @@ class Parser:
             name, token = result
             matcher = token['match']
             after = token['after']
-
+            
+            self.cache_push()
+            
             match = matcher.match(self, self.current_line, self.current_pos)
             if match:
                 length, match = match
 
             if match is None:
+                self.cache_pop()
                 on_fail = token.get('on_fail')
                 if on_fail:
                     on_fail(self)

@@ -239,7 +239,6 @@ class TestBaseLexerPositives(TestCase):
         )
         parser = minilexer.Parser(my_lexer)
         parser.parse_readline(string.readline)
-        parser.finish()
 
     def test_splitlines(self):
         my_lexer = dict(
