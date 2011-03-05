@@ -8,8 +8,8 @@ def pass_token(parser):
     pass
 
 class TestParserSubclass(minilexer.Parser):
-    def __init__(self, lexer):
-        super().__init__(lexer)
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
         self.matched = list()
 
     def token_match(self, token, match):
@@ -24,8 +24,8 @@ BASE = dict(
     )
 )
 
-def parse(lexer, *lines):
-    parser = TestParserSubclass(lexer)
+def parse(lexer, eol_nl, *lines):
+    parser = TestParserSubclass(lexer, eol_nl)
     parser.parse_lines(lines)
     return parser
 
@@ -52,7 +52,8 @@ class TestBaseLexerPositives(TestCase):
                 after = 'finish',
             ),
         )
-        parse(my_lexer, 'word1wOrD2')
+        parse(my_lexer, False, 'word1wOrD2')
+        parse(my_lexer, True, 'word1wOrD2')
 
     def test_mre_simple(self):
         my_lexer = dict(
@@ -66,7 +67,8 @@ class TestBaseLexerPositives(TestCase):
                 after = 'finish',
             ),
         )
-        parse(my_lexer, 'word1word1wRD2')
+        parse(my_lexer, False, 'word1word1wRD2')
+        parse(my_lexer, True, 'word1word1wRD2')
 
     def test_mre_more(self):
         my_lexer = dict(
@@ -84,7 +86,8 @@ class TestBaseLexerPositives(TestCase):
                 after = 'finish',
             ),
         )
-        parse(my_lexer, 'leftwordright')
+        parse(my_lexer, False, 'leftwordright')
+        parse(my_lexer, True, 'leftwordright')
 
     def test_mm_match(self):
         my_lexer = dict(
@@ -102,7 +105,8 @@ class TestBaseLexerPositives(TestCase):
                 after = 'finish',
             ),
         )
-        parse(my_lexer, 'word1word2')
+        parse(my_lexer, False, 'word1word2')
+        parse(my_lexer, True, 'word1word2')
 
     def test_mm_nomatch(self):
         my_lexer = dict(
@@ -129,7 +133,8 @@ class TestBaseLexerPositives(TestCase):
                 after = 'finish',
             ),
         )
-        parse(my_lexer, 'word1word2')
+        parse(my_lexer, False, 'word1word2')
+        parse(my_lexer, True, 'word1word2')
 
     def test_groups(self):
         my_lexer = dict(
@@ -150,7 +155,8 @@ class TestBaseLexerPositives(TestCase):
                 after = 'begin',
             ),
         )
-        parse(my_lexer, 'word1word2')
+        parse(my_lexer, False, 'word1word2')
+        parse(my_lexer, True, 'word1word2')
 
     def test_nested_groups(self):
         my_lexer = dict(
@@ -191,7 +197,8 @@ class TestBaseLexerPositives(TestCase):
                 after = 'begin',
             ),
         )
-        parse(my_lexer, 'word1word2')
+        parse(my_lexer, False, 'word1word2')
+        parse(my_lexer, True, 'word1word2')
 
     def test_after_is_call(self):
         my_lexer = dict(
@@ -201,7 +208,8 @@ class TestBaseLexerPositives(TestCase):
                 after = lambda parser: 'finish',
             ),
         )
-        parse(my_lexer, 'matchme!')
+        parse(my_lexer, False, 'matchme!')
+        parse(my_lexer, True, 'matchme!')
 
     def test_on_match_call(self):
         did_it = False
@@ -217,7 +225,8 @@ class TestBaseLexerPositives(TestCase):
                 after = 'finish',
             ),
         )
-        parse(my_lexer, 'matchme!')
+        parse(my_lexer, False, 'matchme!')
+        parse(my_lexer, True, 'matchme!')
         self.assertTrue(did_it)
 
     def test_readline(self):
@@ -229,30 +238,33 @@ class TestBaseLexerPositives(TestCase):
         my_lexer = dict(
             BASE,
             begin = dict(
-                match = minilexer.MRE('word1$'),
+                match = minilexer.MRE('^word1\n?$'),
                 after = 'word2',
             ),
             word2 = dict(
-                match = minilexer.MS('word2'),
+                match = minilexer.MRE('^word2\n?$'),
                 after = 'finish',
             ),
         )
         parser = minilexer.Parser(my_lexer)
+        parser.parse_readline(string.readline)
+        parser = minilexer.Parser(my_lexer, True)
         parser.parse_readline(string.readline)
 
     def test_splitlines(self):
         my_lexer = dict(
             BASE,
             begin = dict(
-                match = minilexer.MRE('word1$'),
+                match = minilexer.MRE('^word1\n?$'),
                 after = 'word2',
             ),
             word2 = dict(
-                match = minilexer.MS('word2'),
+                match = minilexer.MRE('^word2\n?$'),
                 after = 'finish',
             ),
         )
-        parse(my_lexer, 'word1\nword2')
+        parse(my_lexer, False, 'word1\nword2')
+        parse(my_lexer, True, 'word1\nword2')
 
 class TestMultiline(TestCase):
     '''
@@ -307,7 +319,7 @@ class TestBaseLexerNegatives(TestCase):
     '''
     def assertRaisesLexerError(self, my_lexer, string, error_id):
         try:
-            parse(my_lexer, string)
+            parse(my_lexer, False, string)
         except minilexer.LexerError as e:
             if e.error_id != error_id:
                 self.fail('Incorrect LexerError raised: {} (kwargs = {})'.format(e.error_id, e.kwargs))
@@ -388,7 +400,7 @@ class TestBaseLexerNegatives(TestCase):
                 after = 'finish',
             ),
         )
-        self.assertRaises(WellDone, parse, my_lexer, 'matchme!')
+        self.assertRaises(WellDone, parse, my_lexer, False, 'matchme!')
 
     def test_on_match_call_ignoring(self):
         did_it = [False, False]
@@ -416,7 +428,7 @@ class TestBaseLexerNegatives(TestCase):
                 after = 'finish',
             ),
         )
-        parse(my_lexer, 'matchme!')
+        parse(my_lexer, False, 'matchme!')
         # Make sure we really did fail...
         self.assertTrue(did_it[0])
         # ... and make sure we continued
@@ -444,7 +456,7 @@ class TestBugFixes(TestCase):
                 after = 'finish',
             ),
         )
-        parser = parse(my_lexer, 'b')
+        parser = parse(my_lexer, False, 'b')
         self.assertListEqual(parser.matched, ['b'])
 
 

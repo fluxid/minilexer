@@ -117,8 +117,9 @@ class LexerError(Exception):
         return self.ID_TO_DESC[self.error_id].format(**self.kwargs)
 
 class Parser:
-    def __init__(self, lexer):
+    def __init__(self, lexer, eol_newline = False):
         self.lexer = lexer
+        self.eol_newline = eol_newline
 
         self.current_readline = None
         self.line_cache = list()
@@ -149,7 +150,13 @@ class Parser:
         if self.next_lineidx >= len(self.line_cache) and self.current_readline:
             line = self.current_readline()
             if line:
-                self.line_cache.extend(line.splitlines())
+                splitted = line.splitlines()
+                if self.eol_newline:
+                    splitted = (
+                        l + '\n'
+                        for l in splitted
+                    )
+                self.line_cache.extend(splitted)
             else:
                 self.current_readline = None
 
