@@ -167,6 +167,7 @@ class Parser:
             self.next_lineidx,
             self.current_lineno,
             self.current_pos,
+            self.current_line,
         ))
 
     def cache_pop(self):
@@ -175,6 +176,7 @@ class Parser:
                 self.next_lineidx,
                 self.current_lineno,
                 self.current_pos,
+                self.current_line,
             ) = self.idx_stack.pop()
 
     def cache_discard(self):
@@ -253,7 +255,7 @@ class Parser:
     def run_parser(self):
         while True:
             if self.current_pos >= len(self.current_line) and not self.readline():
-                    break
+                break
 
             result = next(self.current_iter, None)
             if not result:
