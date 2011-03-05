@@ -52,7 +52,7 @@ class MRE(Matcher):
     def match(self, parser, line, pos):
         match = self.regex.match(line, pos)
         if match:
-            return len(match.group(0)), match
+            return pos + len(match.group(0)), match
         return None
 
 class MS(Matcher):
@@ -72,7 +72,7 @@ class MS(Matcher):
             tmp = tmp.lower()
 
         if tmp == self.string:
-            return len(self.string), self.string
+            return pos + len(self.string), self.string
         return None
 
 class MM(Matcher):
@@ -126,10 +126,9 @@ class Parser:
         self.next_lineidx = 0
 
         self.current_iter = None
-        self.current_line = None
+        self.current_line = ''
         self.current_lineno = 0
         self.current_pos = 0
-        self.line_length = 0
 
         self.reset_iter(lexer['_begin'])
 
@@ -158,14 +157,29 @@ class Parser:
         if self.next_lineidx < len(self.line_cache):
             line = self.line_cache[self.next_lineidx]
             self.next_lineidx += 1
+            self.current_lineno += 1
+            self.current_pos = 0
+            self.current_line = line
         return line
     
     def cache_push(self):
-        self.idx_stack.append(self.next_lineidx)
+        self.idx_stack.append((
+            self.next_lineidx,
+            self.current_lineno,
+            self.current_pos,
+        ))
 
     def cache_pop(self):
         if self.idx_stack:
-            self.next_lineidx = self.idx_stack.pop()
+            (
+                self.next_lineidx,
+                self.current_lineno,
+                self.current_pos,
+            ) = self.idx_stack.pop()
+
+    def cache_discard(self):
+        if self.idx_stack:
+            del self.idx_stack[-1]
 
     def cache_purge(self):
         if self.idx_stack:
@@ -238,15 +252,8 @@ class Parser:
 
     def run_parser(self):
         while True:
-            if self.current_pos >= self.line_length:
-                self.cache_purge()
-                self.current_line = self.readline()
-                if not self.current_line:
+            if self.current_pos >= len(self.current_line) and not self.readline():
                     break
-
-                self.current_lineno += 1
-                self.current_pos = 0
-                self.line_length = len(self.current_line)
 
             result = next(self.current_iter, None)
             if not result:
@@ -256,12 +263,12 @@ class Parser:
             name, token = result
             matcher = token['match']
             after = token['after']
-            
+ 
             self.cache_push()
-            
+
             match = matcher.match(self, self.current_line, self.current_pos)
             if match:
-                length, match = match
+                new_pos, match = match
 
             if match is None:
                 self.cache_pop()
@@ -280,5 +287,6 @@ class Parser:
             if callme:
                 after = callme(self)
 
-            self.current_pos += length
+            self.current_pos = new_pos
             self.reset_iter(after)
+            self.cache_purge()

@@ -254,6 +254,52 @@ class TestBaseLexerPositives(TestCase):
         )
         parse(my_lexer, 'word1\nword2')
 
+class TestMultiline(TestCase):
+    '''
+    Testing multiline matching
+    '''
+    def test_match1(self):
+        class mmatch(minilexer.Matcher):
+            '''
+            Match given line and then discard any lines of spam
+            '''
+            def __init__(self, what):
+                self.what = what
+
+            def match(self, parser, line, pos):
+                if line != self.what:
+                    return None
+
+                new_pos, match = pos + len(self.what), self.what
+
+                while True:
+                    parser.cache_push()
+                    newline = parser.readline()
+                    if newline != 'spam':
+                        parser.cache_pop()
+                        return new_pos, match
+                    parser.cache_discard()
+                    new_pos, match = 4, self.what
+
+        my_lexer = dict(
+            BASE,
+            begin = dict(
+                match = mmatch('word1'),
+                after = 'word2',
+            ),
+            word2 = dict(
+                match = mmatch('word2'),
+                after = 'word3',
+            ),
+            word3 = dict(
+                match = minilexer.MS('word3'),
+                after = 'finish',
+            ),
+        )
+        parse(my_lexer, 'word1\nword2\nspam\nspam\nword3')
+
+
+
 
 class TestBaseLexerNegatives(TestCase):
     '''
